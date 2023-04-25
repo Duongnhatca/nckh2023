@@ -85,6 +85,7 @@ count = 0
 isConfirm = False
 
 TIME_TO_END = 30
+TIME_TO_END = 30
 
 
 def checkToSendMessage():
