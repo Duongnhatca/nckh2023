@@ -42,6 +42,10 @@ from pathlib import Path
 import telegram
 import asyncio
 import torch
+import firebase_admin
+from firebase_admin import credentials, firestore
+import time
+import threading
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -49,10 +53,49 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
+# Firebase
+
+
+# Use a service account.
+cred = credentials.Certificate("nckh2023-6e660-firebase-adminsdk-pzchp-ba92ad8282.json")
+
+# Application Default credentials are automatically created.
+app = firebase_admin.initialize_app(cred)
+db = firestore.client()
+
+col_ref = db.collection(u'components')
+
+
+def update_amount(label, type, amount):
+    is_increase = type == 'increase'
+
+    doc = col_ref.where('label', '==', label).get()
+    doc_id = doc[0].id
+    doc_ref = col_ref.document(doc_id)
+    doc_ref.update({'amount': firestore.firestore.Increment(amount if is_increase else -amount)})
+
+
 async def sen_telegram(alo):
     bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
     chat_id = "5243841729"
     await bot.send_message(chat_id=chat_id, text=alo)
+
+count = 0
+
+isConfirm = False
+
+TIME_TO_END = 30
+
+
+def checkToSendMessage():
+    global count
+
+    count += 1
+
+    if (count == TIME_TO_END):
+        count = 0
+
+
 @smart_inference_mode()
 def run(
         weights=ROOT / 'yolov5s.pt',  # model path or triton URL
@@ -91,6 +134,8 @@ def run(
     screenshot = source.lower().startswith('screen')
     if is_url and is_file:
         source = check_file(source)  # download
+
+    global count
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -159,12 +204,22 @@ def run(
 
                 # Print results
                 alo = ""
+                n = 0
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                     alo += f"{n} {names[int(c)],}"
-                    print(alo)
-                    asyncio.run(sen_telegram(alo))
+
+                if count == TIME_TO_END - 1:
+                    print("count", count)
+                    flag = input("Bạn có muốn tiếp tục?\n")
+                    if (flag == "y"):
+                        update_amount(label=names[int(c)], type='increase', amount=int(n))
+                        asyncio.run(sen_telegram(alo))
+                    else:
+                        raise StopIteration
+
+                    raise StopIteration
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
@@ -179,6 +234,8 @@ def run(
                         annotator.box_label(xyxy, label, color=colors(c, True))
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+                #
+                checkToSendMessage()
 
             # Stream results
             im0 = annotator.result()
@@ -262,6 +319,23 @@ def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
     run(**vars(opt))
 
+
+def _main():
+    opt = parse_opt()
+    main(opt)
+
+
+# if __name__ == '__main__':
+#     # # t1 = threading.Thread(target=countdown)
+#     # t2 = threading.Thread(target=_main)
+
+#     # # t1.start()
+#     # t2.start()
+
+#     # # t1.join()
+#     # t2.join()
+#     countdown()
+#     _main()
 
 if __name__ == '__main__':
     opt = parse_opt()
