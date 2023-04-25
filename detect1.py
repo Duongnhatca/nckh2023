@@ -1,4 +1,4 @@
-# YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+# YOLOv5 🚀 by Ultralytics, AGPL-3.0 license
 """
 Run YOLOv5 detection inference on images, videos, directories, globs, YouTube, webcam, streams, etc.
 
@@ -28,55 +28,29 @@ Usage - formats:
                                  yolov5s_paddle_model       # PaddlePaddle
 """
 
+from utils.torch_utils import select_device, smart_inference_mode
+from utils.plots import Annotator, colors, save_one_box
+from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
+                           increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh)
+from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
+from models.common import DetectMultiBackend
 import argparse
 import os
 import platform
 import sys
 from pathlib import Path
-# import subprocess
-import torch
 import telegram
+import torch
 import asyncio
-###### ras
-import firebase_admin
-from firebase_admin import credentials, firestore
-from typing import Optional
-import time
-start_time = time.time()  # Thời điểm bắt đầu chương trình
-# Use a service account.
-cred = credentials.Certificate("nckh2023-6e660-firebase-adminsdk-pzchp-ba92ad8282.json")
-# Application Default credentials are automatically created.
-app = firebase_admin.initialize_app(cred)
-db = firestore.client()
-bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
-chat_id = "5243841729"
-
-col_ref = db.collection(u'components')
-
-def update_amount(label, type):
-  is_increase = type == 'increase'
-  
-  doc = col_ref.where('label', '==', label).get()
-  doc_id = doc[0].id
-  doc_ref = col_ref.document(doc_id)
-  doc_ref.update({'amount': firestore.firestore.Increment(1 if is_increase else -1)})
-
-
-######
-
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-from models.common import DetectMultiBackend
-from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
-from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
-                           increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh)
-from utils.plots import Annotator, colors, save_one_box
-from utils.torch_utils import select_device, smart_inference_mode
-
+# Tạo kết nối đến Bot trên Telegram
+bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
+chat_id = "5243841729"
 
 @smart_inference_mode()
 def run(
@@ -103,12 +77,11 @@ def run(
         exist_ok=False,  # existing project/name ok, do not increment
         line_thickness=3,  # bounding box thickness (pixels)
         hide_labels=False,  # hide labels
-        hide_conf=False,
-        # telegram_alert = False,  # hide confidences
+        hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
-        telegram_alert: Optional[bool] = True  # : Optional[bool]
+        ten=False,  # a new parameter
 ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -188,22 +161,12 @@ def run(
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                    
-
+                class_counts = {name: 0 for name in opt.ten}
                 # Write results
-                # if conf >= 0.5 :
-                async def send_telegram_alert(bot, chat_id, class_name, class_count):
-                    message = f"Detected {class_count} {class_name}{'s' if class_count > 1 else ''}"
-                    await bot.send_message(chat_id=chat_id, text=message)
-                prev_cls = None  # Khởi tạo biến prev_cls
-                class_counts = {name: 0 for name in names}  # Khởi tạo biến đếm
                 for *xyxy, conf, cls in reversed(det):
-                    # c = int(cls)
-                    # class_name = names[c]
-                    # if class_name not in class_counts:
-                    #     class_counts[class_name] = 1
-                    # else:
-                    #     class_counts[class_name] += 1
+                    c = int(cls)
+                    class_name = opt.ten[c]
+                    class_counts[class_name] += 1
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
@@ -216,42 +179,17 @@ def run(
                         annotator.box_label(xyxy, label, color=colors(c, True))
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
-                # print(telegram_alert)
-                # if prev_cls != cls:  # Kiểm tra xem có sự thay đổi về class hay không
-                #     prev_cls = cls  # Cập nhật giá trị của prev_cls
-                #     class_name = names[int(cls)]
-                #     if class_name not in class_counts:
-                #         class_counts[class_name] = 0
-                #     class_count = class_counts[class_name]
-                #     # class_count = class_counts[class_name]
-                #     message = f'New object detected: {class_name} ({class_count} {"" if class_count == 1 else "s"} in frame)'
-                #     # if telegram_alert:  # Kiểm tra xem có cần gửi thông báo đến Telegram hay không
-                #     async def send_telegram_alert():
-                #         bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
-                #         chat_id = "5243841729"
-                #         # message = f'New object detected: {names[int(cls)]}'
-                #         try:
-                #             await bot.send_message(chat_id=chat_id, text=message)
-                #             print("Sent Telegram alert successfully!")
-                #         except Exception as e:
-                #             print(f"Failed to send Telegram alert with error: {e}")
-                #         # loop = asyncio.get_running_loop()
-                #         # await loop.create_task(send_telegram_alert())
-                #         asyncio.run(send_telegram_alert())
-                # for class_name, class_count in class_counts.items():
-                #     async def send_telegram_alert():
-                #         message = f"Detected {class_count} {class_name}{'s' if class_count > 1 else ''}"
-                #         await bot.send_message(chat_id=chat_id, text=message)
-                #     asyncio.run(send_telegram_alert())
-                    class_name = names[int(cls)]
-                    if class_name in class_counts:
-                        class_counts[class_name] += 1
-
-        # Gửi tin nhắn đến Telegram
-                        asyncio.set_event_loop(asyncio.new_event_loop())
-                        loop = asyncio.get_event_loop()
-                        loop.create_task(send_telegram_alert(bot, chat_id, class_name, class_counts[class_name]))
-                        loop.run_until_complete(asyncio.sleep(0))   
+                for class_name, class_count in class_counts.items():
+                    async def send_telegram_alert():
+                        while True:
+                            try:
+                                message = f"Detected {class_count} {class_name}{'s' if class_count > 1 else ''}"
+                                await bot.send_message(chat_id=chat_id, text=message)
+                                break
+                            except Exception as e:
+                                print(f"Error sending message: {e}")
+                                await asyncio.sleep(1)
+                    asyncio.run(send_telegram_alert())
             # Stream results
             im0 = annotator.result()
             if view_img:
@@ -262,6 +200,7 @@ def run(
                 cv2.imshow(str("Object_Detection"), im0)
                 if cv2.waitKey(1) == ord('q'):  # q to quit
                     raise StopIteration  # 1 millisecond
+
             # Save results (image with detections)
             if save_img:
                 if dataset.mode == 'image':
@@ -296,7 +235,7 @@ def run(
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'best.pt', help='model path or triton URL')
+    parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path or triton URL')
     parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob/screen/0(webcam)')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
@@ -323,27 +262,18 @@ def parse_opt():
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
+    parser.add_argument('--ten', nargs='+', type=str, default=['item'], help='list of class ten')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(vars(opt))
     return opt
-  
+
 
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
     run(**vars(opt))
-    
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     opt = parse_opt()
     main(opt)
-
-    
-    
-    
-
-# if not args.webcam:  # not stream
-#     os.system('python utils/datasets.py --task test --data coco.yaml --weights ' +
-#               weights + ' --batch-size 1 --img 640 --iou-thres 0.65')  # test.py
-#     os.system('python test.py --weights ' + weights + ' --data coco.yaml --img 640 --iou-thres 0.65 --conf-thres 0.25 --project ' +
-#               str(Path(weights).stem) + ' --name ' + str(Path(weights).stem))  # detect.py
