@@ -65,27 +65,48 @@ db = firestore.client()
 col_ref = db.collection(u'components')
 
 
-# def update_amount(label, type, amount):
-#     is_increase = type == 'increase'
+def update_amount(label, type, amount):
+    is_increase = type == 'increase'
 
-#     doc = col_ref.where('label', '==', label).get()
-#     doc_id = doc[0].id
-#     doc_ref = col_ref.document(doc_id)
-#     doc_ref.update({'amount': firestore.firestore.Increment(amount if is_increase else -amount)})
+    parent_label = label.split("/", 1)[0]
+
+    parent_doc = col_ref.where('label', '==', parent_label).get()
+    if not parent_doc:
+        # Parent document not found, handle error here
+        return
+
+    child_label = label.split("/", 1)[1]
+
+    parent_id = parent_doc[0].id
+    child_doc = col_ref.document(parent_id).collection(
+        'items').where('label', '==', child_label).get()
+
+    if not child_doc:
+        # Child document not found, handle error here
+        return
+
+    child_id = child_doc[0].id
+    child_ref = col_ref.document(parent_id).collection(
+        'items').document(child_id)
+    child_ref.update({'amount': firestore.firestore.Increment(
+        amount if is_increase else -amount)})
 
 
-async def sen_telegram(ten_nhom,nhom_truong,msv,lop_hp,alo):
+async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, alo):
     bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
     chat_id = "5243841729"
     text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {alo}"
     await bot.send_message(chat_id=chat_id, text=text)
+
 
 def nguoi_dung():
     ten_nhom = input("Mời nhập tên nhóm: ")
     nhom_truong = input("Mời nhập tên nhóm trưởng: ")
     msv = int(input("Mời nhập mã sinh viên: "))
     lop_hp = input("Mời nhập tên lớp học phần: ")
-    return ten_nhom,nhom_truong,msv,lop_hp
+    return ten_nhom, nhom_truong, msv, lop_hp
+
+
 count = 0
 
 isConfirm = False
@@ -206,11 +227,11 @@ def run(
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
-                
+
                 # Print results
                 alo = " "
                 n = 0
-    
+
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
@@ -223,7 +244,9 @@ def run(
                     flag = input("Bạn có xác nhận mượn(yes/no)?\n")
                     if (flag == "yes"):
                         # update_amount(label=names[int(c)], type='increase', amount=int(n))
-                        asyncio.run(sen_telegram(ten_nhom,nhom_truong,msv,lop_hp,alo))
+                        label = names[int(c)] + "/" + names[int(c)]
+                        update_amount(label=label, type='increase', amount=int(n))
+                        asyncio.run(sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, alo))
                         # asyncio.run(sen_telegram(alo))
                     else:
                         raise StopIteration
