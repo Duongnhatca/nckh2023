@@ -28,6 +28,9 @@ Usage - formats:
                                  yolov5s_paddle_model       # PaddlePaddle
 """
 
+import tkinter as tk
+import tkinter.ttk as exTK
+from tkinter import font
 from utils.torch_utils import select_device, smart_inference_mode
 from utils.plots import Annotator, colors, save_one_box
 from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
@@ -44,6 +47,7 @@ import asyncio
 import torch
 import firebase_admin
 from firebase_admin import credentials, firestore
+from PIL import Image, ImageTk
 import time
 import threading
 
@@ -64,6 +68,9 @@ db = firestore.client()
 
 col_ref = db.collection(u'components')
 
+is_borrow = False
+app = tk.Tk()
+info = {}
 
 def update_amount(label, type, amount):
     is_increase = type == 'increase'
@@ -92,10 +99,15 @@ def update_amount(label, type, amount):
         amount if is_increase else -amount)})
 
 
-async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, alo):
+async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp,tinh_trang, amount):
+    global is_borrow
+    text = ''
     bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
     chat_id = "5243841729"
-    text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {alo}"
+    if (is_borrow):
+      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {amount}\nTình tạng linh kiện: {tinh_trang}"
+    else:
+      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện trả: {amount}\nTình tạng linh kiện: {tinh_trang}"
     await bot.send_message(chat_id=chat_id, text=text)
 
 
@@ -163,6 +175,9 @@ def run(
         source = check_file(source)  # download
 
     global count
+    global is_borrow
+    global app
+    
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -239,19 +254,55 @@ def run(
 
                 if count == TIME_TO_END - 1:
                     print("Đã quét xong")
-                    ten_nhom, nhom_truong, msv, lop_hp = nguoi_dung()
+                    # ten_nhom, nhom_truong, msv, lop_hp = nguoi_dung()
                     # alo += f" {n} {names[int(c)],}"
-                    flag = input("Bạn có xác nhận mượn(yes/no)?\n")
-                    if (flag == "yes"):
-                        # update_amount(label=names[int(c)], type='increase', amount=int(n))
-                        label = names[int(c)] + "/" + names[int(c)]
-                        update_amount(label=label, type='increase', amount=int(n))
-                        asyncio.run(sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, alo))
-                        # asyncio.run(sen_telegram(alo))
-                    else:
+                    confirm = tk.Tk()
+
+                    def confirm_borrow():
+                        print('confirm_borrow')
+                        _str = alo.split(',')[:-1]
+                        global info 
+                        # Split each element by space and create a list of tuples
+                        lst = [(s.split()[1], int(s.split()[0])) for s in _str]
+                        type = 'decrease' if is_borrow else 'increase' 
+                        print("LIST =>", lst)
+                        print("TYPE =>", type)
+                        for item in lst:
+                            label = item[0] + "/" + item[0]
+                            update_amount(label=label, type=type, amount=int(item[1]))
+                        
+                        asyncio.run(sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], info["tinh_trang"], alo))
+                        confirm.destroy()
+                        app.destroy()
+                        
+                        raise StopIteration
+                        # loop = asyncio.get_event_loop()
+                        # loop.run_until_complete(asyncio.wait([sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], alo)]))
+                    def reject_borrow():
+                        confirm.destroy()
+                        app.destroy()
                         raise StopIteration
 
+                    confirm.title("Bảng xác nhận")
+                    confirm.geometry("200x100")
+
+                    if (is_borrow):
+                        flag = "mượn"
+                    else:
+                        flag = "trả"
+
+                    tk.Label(confirm, text="Bạn có xác nhận "+flag).pack()
+                    yes_button = tk.Button(confirm, text="Có", command=confirm_borrow)
+                    yes_button.place(height=30, width=90, x= 5, y= 50)
+                    no_button = tk.Button(confirm, text="Không", command=reject_borrow)
+                    no_button.place(height=30, width=90, x= 105, y= 50)
+
+                    confirm.mainloop()
+
                     raise StopIteration
+
+                    # app.destroy()
+                    # raise StopIteration
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
@@ -346,28 +397,124 @@ def parse_opt():
     print_args(vars(opt))
     return opt
 
-
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
-    run(**vars(opt))
 
+    def move_focus(event):
+        if event.keysym == "Up":
+            current_entry = app.focus_get()
+            current_entry.tk_focusPrev().focus()
+            return "break"
+        elif event.keysym == "Down":
+            current_entry = app.focus_get()
+            current_entry.tk_focusNext().focus()
+            return "break"
+        elif event.keysym == "Left":
+            current_entry = app.focus_get()
+            next_entry = current_entry.tk_focusPrev()
+            if next_entry:
+                next_entry.focus_set()
+            return "break"
+        elif event.keysym == "Right":
+            current_entry = app.focus_get()
+            next_entry = current_entry.tk_focusNext()
+            if next_entry:
+                next_entry.focus_set()
+            return "break"
 
-def _main():
-    opt = parse_opt()
-    main(opt)
+    # def focus_next_entry(event):
+    #     event.widget.tk_focusNext().focus()
+    #     return "break"
+    
+    global app
+    app.title("Hệ thống quản lý linh kiện")
+    icon_image=Image.open('icon.png')
+    icon = ImageTk.PhotoImage(icon_image)
+    app.iconphoto(True,icon)
+    app.resizable(False, False)
+    app.geometry("650x330")
+    app.bind("<Up>", move_focus)
+    app.bind("<Down>", move_focus)
+    app.bind("<Left>", move_focus)
+    app.bind("<Right>", move_focus)
 
+    image_path = "logo.png"
+    image = Image.open(image_path)
+    image = image.resize((650,50))
+    photo = ImageTk.PhotoImage(image)
+    logo_truong = tk.Label(app, image=photo)
+    logo_truong.place(height=50,width=650,x=0,y=0)
 
-# if __name__ == '__main__':
-#     # # t1 = threading.Thread(target=countdown)
-#     # t2 = threading.Thread(target=_main)
+    bold_font = font.Font(weight="bold", size=11, family="Arial")
+    l_de_tai = tk.Label(app, text="ĐỀ TÀI NGUYÊN CỨU KHOA HỌC",bg="#54DB90", fg="black",font=bold_font)
+    l_de_tai.pack()
+    l_ten_de_tai = tk.Label(app, text="XÂY DỰNG PHẦN MỀM QUẢN LÝ LINH KIỆN ĐIỆN TỬ SỬ DỤNG XỬ LÝ ẢNH",bg="#54DB90", fg="black",font=bold_font)
+    l_ten_de_tai.pack()
 
-#     # # t1.start()
-#     # t2.start()
+    l_ten_nhom = exTK.Label(app, text="Tên nhóm: ")
+    ten_nhom = tk.Entry(app)
+    l_ten_nhom.place(height=25,width=100,x=20,y=70)
+    ten_nhom.place(height=25,width=150,x=140,y=70)
+    ten_nhom.focus_set()
+    # ten_nhom.bind("<Return>", focus_next_entry)
 
-#     # # t1.join()
-#     # t2.join()
-#     countdown()
-#     _main()
+    l_nhom_truong = exTK.Label(app, text="Tên nhóm trưởng: ")
+    nhom_truong = tk.Entry(app)
+    l_nhom_truong.place(height=25,width=100,x=350,y=70)
+    nhom_truong.place(height=25,width=150,x=470,y=70)
+    # nhom_truong.bind("<Return>", focus_next_entry)
+
+    l_msv = exTK.Label(app, text="Mã sinh viên: ")
+    msv = tk.Entry(app)
+    l_msv.place(height=25,width=100,x=20,y=70+65)
+    msv.place(height=25,width=150,x=140,y=70+65)
+    # msv.bind("<Return>", focus_next_entry)
+
+    l_lop_hp = exTK.Label(app, text="Lớp học phần: ")
+    lop_hp = tk.Entry(app)
+    l_lop_hp.place(height=25,width=100,x=350,y=70+65)
+    lop_hp.place(height=25,width=150,x=470,y=70+65)
+
+    l_options = exTK.Label(app, text="Lựa chọn chế độ:")
+    options = ["Mượn", "Trả"]  # Thay đổi các lựa chọn theo ý muốn
+    selected_option = tk.StringVar(app)
+    selected_option.set(options[0])  # Giá trị mặc định cho dropdown
+    l_options.place(height=25,width=100,x=20,y=70+65+65)
+
+    l_tinh_trang = exTK.Label(app, text = "Tình trạng linh kiện:")
+    tinh_trang = tk.Entry(app)
+    l_tinh_trang.place(height=25,width=120,x=350,y=70+65+65)
+    tinh_trang.place(height=25,width=150,x=470,y=70+65+65)
+
+    def run_with_params():
+      global is_borrow
+
+      if (selected_option.get() == "Mượn"):
+        is_borrow = True
+      else:
+        is_borrow = False
+
+      global info
+      info = {
+        "ten_nhom": ten_nhom.get(),
+        "nhom_truong": nhom_truong.get(),
+        "msv": msv.get(),
+        "lop_hp": lop_hp.get(),
+        "tinh_trang": tinh_trang.get()
+      }
+      run(**vars(opt))
+      
+
+    dropdown = tk.OptionMenu(app, selected_option, *options)
+    dropdown.place(height=25,width=100,x=160,y=70+65+65)
+
+    save_button = tk.Button(app, text="Xác nhận", command=run_with_params)
+    save_button.place(height=25,width=100,x=20,y=70+65+65+65)
+
+    quit_button = tk.Button(app, text="Exit", command=app.quit)
+    quit_button.place(height=25,width=100,x=520,y=70+65+65+65)
+
+    app.mainloop()
 
 if __name__ == '__main__':
     opt = parse_opt()
