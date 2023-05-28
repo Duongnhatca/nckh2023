@@ -28,6 +28,7 @@ Usage - formats:
                                  yolov5s_paddle_model       # PaddlePaddle
 """
 
+import tkinter as tk
 from utils.torch_utils import select_device, smart_inference_mode
 from utils.plots import Annotator, colors, save_one_box
 from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
@@ -64,6 +65,8 @@ db = firestore.client()
 
 col_ref = db.collection(u'components')
 
+is_borrow = False
+info = {}
 
 def update_amount(label, type, amount):
     is_increase = type == 'increase'
@@ -92,10 +95,15 @@ def update_amount(label, type, amount):
         amount if is_increase else -amount)})
 
 
-async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, alo):
+async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, amount):
+    global is_borrow
+    text = ''
     bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
     chat_id = "5243841729"
-    text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {alo}"
+    if (is_borrow):
+      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {amount}"
+    else:
+      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện trả: {amount}"
     await bot.send_message(chat_id=chat_id, text=text)
 
 
@@ -163,6 +171,8 @@ def run(
         source = check_file(source)  # download
 
     global count
+    global is_borrow
+    
 
     # Directories
     save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
@@ -239,15 +249,28 @@ def run(
 
                 if count == TIME_TO_END - 1:
                     print("Đã quét xong")
-                    ten_nhom, nhom_truong, msv, lop_hp = nguoi_dung()
+                    # ten_nhom, nhom_truong, msv, lop_hp = nguoi_dung()
                     # alo += f" {n} {names[int(c)],}"
-                    flag = input("Bạn có xác nhận mượn(yes/no)?\n")
+                    flag = ''
+                    if (is_borrow):
+                      flag = input("Bạn có xác nhận mượn(yes/no)?\n")
+                    else:
+                      flag = input("Bạn có xác nhận trả(yes/no)?\n")
                     if (flag == "yes"):
-                        # update_amount(label=names[int(c)], type='increase', amount=int(n))
-                        label = names[int(c)] + "/" + names[int(c)]
-                        update_amount(label=label, type='increase', amount=int(n))
-                        asyncio.run(sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, alo))
-                        # asyncio.run(sen_telegram(alo))
+                        _str = alo.split(',')[:-1]
+                        global info
+                        # Split each element by space and create a list of tuples
+                        lst = [(s.split()[1], int(s.split()[0])) for s in _str]
+                        type = 'decrease' if is_borrow else 'increase' 
+                        print("LIST =>", lst)
+                        print("TYPE =>", type)
+                        for item in lst:
+                            label = item[0] + "/" + item[0]
+                            update_amount(label=label, type=type, amount=int(item[1]))
+                        
+                        asyncio.run(sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], alo))
+                        # loop = asyncio.get_event_loop()
+                        # loop.run_until_complete(asyncio.wait([sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], alo)]))
                     else:
                         raise StopIteration
 
@@ -349,26 +372,61 @@ def parse_opt():
 
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
-    run(**vars(opt))
+    
 
+    app = tk.Tk()
+    app.title("Hệ thống quản lý linh kiện")
+    app.geometry("250x200")
 
-def _main():
-    opt = parse_opt()
-    main(opt)
+    tk.Label(app, text="Tên nhóm: ").grid(row=0, column=0)
+    ten_nhom = tk.Entry(app)
+    ten_nhom.grid(row=0, column=1)
 
+    print("ten_nhom",ten_nhom.get())
 
-# if __name__ == '__main__':
-#     # # t1 = threading.Thread(target=countdown)
-#     # t2 = threading.Thread(target=_main)
+    tk.Label(app, text="Tên nhóm trưởng: ").grid(row=1, column=0)
+    nhom_truong = tk.Entry(app)
+    nhom_truong.grid(row=1, column=1)
 
-#     # # t1.start()
-#     # t2.start()
+    tk.Label(app, text="Mã sinh viên: ").grid(row=3, column=0)
+    msv = tk.Entry(app)
+    msv.grid(row=3, column=1)
 
-#     # # t1.join()
-#     # t2.join()
-#     countdown()
-#     _main()
+    tk.Label(app, text="Lớp học phần: ").grid(row=4, column=0)
+    lop_hp = tk.Entry(app)
+    lop_hp.grid(row=4, column=1)
+
+    tk.Label(app, text="Lựa chọn chế độ:").grid(row=5, column=0)
+    options = ["Mượn", "Trả"]  # Thay đổi các lựa chọn theo ý muốn
+    selected_option = tk.StringVar(app)
+    selected_option.set(options[0])  # Giá trị mặc định cho dropdown
+
+    def run_with_params():
+      global is_borrow
+
+      if (selected_option.get() == "Mượn"):
+        is_borrow = True
+      else:
+        is_borrow = False
+
+      global info
+      info = {
+        "ten_nhom": ten_nhom.get(),
+        "nhom_truong": nhom_truong.get(),
+        "msv": msv.get(),
+        "lop_hp": lop_hp.get(),
+      }
+      run(**vars(opt))
+
+    dropdown = tk.OptionMenu(app, selected_option, *options)
+    dropdown.grid(row=5, column=1)
+
+    save_button = tk.Button(app, text="Xác nhận", command=run_with_params)
+    save_button.grid(row=6, column=0)
+
+    app.mainloop()
 
 if __name__ == '__main__':
     opt = parse_opt()
     main(opt)
+
