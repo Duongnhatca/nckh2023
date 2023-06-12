@@ -66,6 +66,7 @@ db = firestore.client()
 col_ref = db.collection(u'components')
 
 is_borrow = False
+app = tk.Tk()
 info = {}
 
 def update_amount(label, type, amount):
@@ -172,6 +173,7 @@ def run(
 
     global count
     global is_borrow
+    global app
     
 
     # Directories
@@ -251,14 +253,12 @@ def run(
                     print("Đã quét xong")
                     # ten_nhom, nhom_truong, msv, lop_hp = nguoi_dung()
                     # alo += f" {n} {names[int(c)],}"
-                    flag = ''
-                    if (is_borrow):
-                      flag = input("Bạn có xác nhận mượn(yes/no)?\n")
-                    else:
-                      flag = input("Bạn có xác nhận trả(yes/no)?\n")
-                    if (flag == "yes"):
+                    confirm = tk.Tk()
+
+                    def confirm_borrow():
+                        print('confirm_borrow')
                         _str = alo.split(',')[:-1]
-                        global info
+                        global info 
                         # Split each element by space and create a list of tuples
                         lst = [(s.split()[1], int(s.split()[0])) for s in _str]
                         type = 'decrease' if is_borrow else 'increase' 
@@ -269,12 +269,32 @@ def run(
                             update_amount(label=label, type=type, amount=int(item[1]))
                         
                         asyncio.run(sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], alo))
+                        confirm.destroy()
+                        app.destroy()
+                        
+                        raise StopIteration
                         # loop = asyncio.get_event_loop()
                         # loop.run_until_complete(asyncio.wait([sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], alo)]))
-                    else:
+                    def reject_borrow():
+                        confirm.destroy()
+                        app.destroy()
                         raise StopIteration
 
+                    confirm.title("Bảng xác nhận")
+                    confirm.geometry("250x200")
+                    tk.Label(confirm, text="Bạn có xác nhận mượn").grid(row=0, column=0)
+
+                    yes_button = tk.Button(confirm, text="Có", command=confirm_borrow)
+                    yes_button.grid(row=1, column=0)
+                    no_button = tk.Button(confirm, text="Không", command=reject_borrow)
+                    no_button.grid(row=1, column=1)
+
+                    confirm.mainloop()
+
                     raise StopIteration
+
+                    # app.destroy()
+                    # raise StopIteration
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
@@ -372,17 +392,14 @@ def parse_opt():
 
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
-    
 
-    app = tk.Tk()
+    global app
     app.title("Hệ thống quản lý linh kiện")
     app.geometry("250x200")
 
     tk.Label(app, text="Tên nhóm: ").grid(row=0, column=0)
     ten_nhom = tk.Entry(app)
     ten_nhom.grid(row=0, column=1)
-
-    print("ten_nhom",ten_nhom.get())
 
     tk.Label(app, text="Tên nhóm trưởng: ").grid(row=1, column=0)
     nhom_truong = tk.Entry(app)
