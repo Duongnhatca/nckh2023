@@ -29,6 +29,8 @@ Usage - formats:
 """
 
 import tkinter as tk
+import tkinter.ttk as exTK
+from tkinter import font
 from utils.torch_utils import select_device, smart_inference_mode
 from utils.plots import Annotator, colors, save_one_box
 from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
@@ -45,6 +47,7 @@ import asyncio
 import torch
 import firebase_admin
 from firebase_admin import credentials, firestore
+from PIL import Image, ImageTk
 import time
 import threading
 
@@ -281,13 +284,18 @@ def run(
                         raise StopIteration
 
                     confirm.title("Bảng xác nhận")
-                    confirm.geometry("250x200")
-                    tk.Label(confirm, text="Bạn có xác nhận mượn").grid(row=0, column=0)
+                    confirm.geometry("200x100")
 
+                    if (is_borrow):
+                        flag = "mượn"
+                    else:
+                        flag = "trả"
+
+                    tk.Label(confirm, text="Bạn có xác nhận "+flag).pack()
                     yes_button = tk.Button(confirm, text="Có", command=confirm_borrow)
-                    yes_button.grid(row=1, column=0)
+                    yes_button.place(height=30, width=90, x= 5, y= 50)
                     no_button = tk.Button(confirm, text="Không", command=reject_borrow)
-                    no_button.grid(row=1, column=1)
+                    no_button.place(height=30, width=90, x= 105, y= 50)
 
                     confirm.mainloop()
 
@@ -389,34 +397,89 @@ def parse_opt():
     print_args(vars(opt))
     return opt
 
-
 def main(opt):
     check_requirements(exclude=('tensorboard', 'thop'))
 
+    def move_focus(event):
+        if event.keysym == "Up":
+            current_entry = app.focus_get()
+            current_entry.tk_focusPrev().focus()
+            return "break"
+        elif event.keysym == "Down":
+            current_entry = app.focus_get()
+            current_entry.tk_focusNext().focus()
+            return "break"
+        elif event.keysym == "Left":
+            current_entry = app.focus_get()
+            next_entry = current_entry.tk_focusPrev()
+            if next_entry:
+                next_entry.focus_set()
+            return "break"
+        elif event.keysym == "Right":
+            current_entry = app.focus_get()
+            next_entry = current_entry.tk_focusNext()
+            if next_entry:
+                next_entry.focus_set()
+            return "break"
+
+    # def focus_next_entry(event):
+    #     event.widget.tk_focusNext().focus()
+    #     return "break"
+    
     global app
     app.title("Hệ thống quản lý linh kiện")
-    app.geometry("250x200")
+    icon_image=Image.open('icon.png')
+    icon = ImageTk.PhotoImage(icon_image)
+    app.iconphoto(True,icon)
+    app.resizable(False, False)
+    app.geometry("650x330")
+    app.bind("<Up>", move_focus)
+    app.bind("<Down>", move_focus)
+    app.bind("<Left>", move_focus)
+    app.bind("<Right>", move_focus)
 
-    tk.Label(app, text="Tên nhóm: ").grid(row=0, column=0)
+    image_path = "logo.png"
+    image = Image.open(image_path)
+    image = image.resize((650,50))
+    photo = ImageTk.PhotoImage(image)
+    logo_truong = tk.Label(app, image=photo)
+    logo_truong.place(height=50,width=650,x=0,y=0)
+
+    bold_font = font.Font(weight="bold", size=11, family="Arial")
+    l_de_tai = tk.Label(app, text="ĐỀ TÀI NGUYÊN CỨU KHOA HỌC",bg="#54DB90", fg="black",font=bold_font)
+    l_de_tai.pack()
+    l_ten_de_tai = tk.Label(app, text="XÂY DỰNG PHẦN MỀM QUẢN LÝ LINH KIỆN ĐIỆN TỬ SỬ DỤNG XỬ LÝ ẢNH",bg="#54DB90", fg="black",font=bold_font)
+    l_ten_de_tai.pack()
+
+    l_ten_nhom = exTK.Label(app, text="Tên nhóm: ")
     ten_nhom = tk.Entry(app)
-    ten_nhom.grid(row=0, column=1)
+    l_ten_nhom.place(height=25,width=100,x=20,y=70)
+    ten_nhom.place(height=25,width=150,x=140,y=70)
+    ten_nhom.focus_set()
+    # ten_nhom.bind("<Return>", focus_next_entry)
 
-    tk.Label(app, text="Tên nhóm trưởng: ").grid(row=1, column=0)
+    l_nhom_truong = exTK.Label(app, text="Tên nhóm trưởng: ")
     nhom_truong = tk.Entry(app)
-    nhom_truong.grid(row=1, column=1)
+    l_nhom_truong.place(height=25,width=100,x=350,y=70)
+    nhom_truong.place(height=25,width=150,x=470,y=70)
+    # nhom_truong.bind("<Return>", focus_next_entry)
 
-    tk.Label(app, text="Mã sinh viên: ").grid(row=3, column=0)
+    l_msv = exTK.Label(app, text="Mã sinh viên: ")
     msv = tk.Entry(app)
-    msv.grid(row=3, column=1)
+    l_msv.place(height=25,width=100,x=20,y=70+65)
+    msv.place(height=25,width=150,x=140,y=70+65)
+    # msv.bind("<Return>", focus_next_entry)
 
-    tk.Label(app, text="Lớp học phần: ").grid(row=4, column=0)
+    l_lop_hp = exTK.Label(app, text="Lớp học phần: ")
     lop_hp = tk.Entry(app)
-    lop_hp.grid(row=4, column=1)
+    l_lop_hp.place(height=25,width=100,x=350,y=70+65)
+    lop_hp.place(height=25,width=150,x=470,y=70+65)
 
-    tk.Label(app, text="Lựa chọn chế độ:").grid(row=5, column=0)
+    l_options = exTK.Label(app, text="Lựa chọn chế độ:")
     options = ["Mượn", "Trả"]  # Thay đổi các lựa chọn theo ý muốn
     selected_option = tk.StringVar(app)
     selected_option.set(options[0])  # Giá trị mặc định cho dropdown
+    l_options.place(height=25,width=100,x=20,y=70+65+65)
 
     def run_with_params():
       global is_borrow
@@ -434,16 +497,19 @@ def main(opt):
         "lop_hp": lop_hp.get(),
       }
       run(**vars(opt))
+      
 
     dropdown = tk.OptionMenu(app, selected_option, *options)
-    dropdown.grid(row=5, column=1)
+    dropdown.place(height=25,width=100,x=160,y=70+65+65)
 
     save_button = tk.Button(app, text="Xác nhận", command=run_with_params)
-    save_button.grid(row=6, column=0)
+    save_button.place(height=25,width=100,x=20,y=70+65+65+65)
+
+    quit_button = tk.Button(app, text="Exit", command=app.quit)
+    quit_button.place(height=25,width=100,x=520,y=70+65+65+65)
 
     app.mainloop()
 
 if __name__ == '__main__':
     opt = parse_opt()
     main(opt)
-
