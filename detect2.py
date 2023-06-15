@@ -84,6 +84,8 @@ def update_amount(label, type, amount):
 
     child_label = label.split("/", 1)[1]
 
+    print("CHILD_LABEL =>", child_label)
+
     parent_id = parent_doc[0].id
     child_doc = col_ref.document(parent_id).collection(
         'items').where('label', '==', child_label).get()
@@ -95,8 +97,25 @@ def update_amount(label, type, amount):
     child_id = child_doc[0].id
     child_ref = col_ref.document(parent_id).collection(
         'items').document(child_id)
-    child_ref.update({'amount': firestore.firestore.Increment(
-        amount if is_increase else -amount)})
+    
+    # Get the current amount of the child_ref
+    current_amount = child_doc[0].get("amount")
+
+    # Check if the current amount is already 0
+    if current_amount == 0 and not is_increase:
+        print("Amount is already 0. No further subtraction.")
+        return
+
+    # Calculate the new amount after subtraction
+    new_amount = int(current_amount) - amount if not is_increase else int(current_amount) + amount
+
+    # Ensure the new amount is not less than 0
+    new_amount = max(new_amount, 0)
+
+    child_ref.update({'amount': new_amount})
+    
+    updated_child_data = child_ref.get().to_dict()
+    print("Updated Child Data:", updated_child_data)
 
 
 async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, amount):
