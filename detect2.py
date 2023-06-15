@@ -118,15 +118,15 @@ def update_amount(label, type, amount):
     print("Updated Child Data:", updated_child_data)
 
 
-async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp, amount):
+async def sen_telegram(ten_nhom, nhom_truong, msv, lop_hp,tinh_trang, amount):
     global is_borrow
     text = ''
     bot = telegram.Bot(token="6211404922:AAEBn2rI4mm92avEXpoao_xPUZpsK6NMHVg")
     chat_id = "5243841729"
     if (is_borrow):
-      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {amount}"
+      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện mượn: {amount}\nTình tạng linh kiện: {tinh_trang}"
     else:
-      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện trả: {amount}"
+      text = f"Tên nhóm: {ten_nhom}\nTên nhóm trưởng: {nhom_truong}\nMã sinh viên: {msv}\nLớp học phần: {lop_hp}\nSố lượng linh kiện trả: {amount}\nTình tạng linh kiện: {tinh_trang}"
     await bot.send_message(chat_id=chat_id, text=text)
 
 
@@ -290,7 +290,7 @@ def run(
                             label = item[0] + "/" + item[0]
                             update_amount(label=label, type=type, amount=int(item[1]))
                         
-                        asyncio.run(sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], alo))
+                        asyncio.run(sen_telegram(info["ten_nhom"], info["nhom_truong"], info["msv"], info["lop_hp"], info["tinh_trang"], alo))
                         confirm.destroy()
                         app.destroy()
                         
@@ -500,6 +500,11 @@ def main(opt):
     selected_option.set(options[0])  # Giá trị mặc định cho dropdown
     l_options.place(height=25,width=100,x=20,y=70+65+65)
 
+    l_tinh_trang = exTK.Label(app, text = "Tình trạng linh kiện:")
+    tinh_trang = tk.Entry(app)
+    l_tinh_trang.place(height=25,width=120,x=350,y=70+65+65)
+    tinh_trang.place(height=25,width=150,x=470,y=70+65+65)
+
     def run_with_params():
       global is_borrow
 
@@ -514,6 +519,7 @@ def main(opt):
         "nhom_truong": nhom_truong.get(),
         "msv": msv.get(),
         "lop_hp": lop_hp.get(),
+        "tinh_trang": tinh_trang.get()
       }
       run(**vars(opt))
       
